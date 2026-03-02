@@ -119,23 +119,26 @@ export default function Home() {
                 ) : (
                   <div>
                     {/* Highlight the key finding */}
-                    <div
-                      className={`mb-3 p-3 rounded text-sm font-semibold ${
-                        result.response &&
-                        (result.response as Record<string, unknown>)
-                          .paramCount === 0 &&
-                        test.url.includes("?")
-                          ? "bg-red-900/50 text-red-300 border border-red-700"
-                          : "bg-green-900/50 text-green-300 border border-green-700"
-                      }`}
-                    >
-                      {result.response &&
-                      (result.response as Record<string, unknown>)
-                        .paramCount === 0 &&
-                      test.url.includes("?")
-                        ? "❌ BUG CONFIRMED: Search params were STRIPPED!"
-                        : "✅ Params received correctly"}
-                    </div>
+                    {(() => {
+                      const r = result.response as Record<string, unknown>;
+                      const hasBug =
+                        r &&
+                        test.url.includes("?") &&
+                        (r.searchString === "" || r.searchString === null);
+                      return (
+                        <div
+                          className={`mb-3 p-3 rounded text-sm font-semibold ${
+                            hasBug
+                              ? "bg-red-900/50 text-red-300 border border-red-700"
+                              : "bg-green-900/50 text-green-300 border border-green-700"
+                          }`}
+                        >
+                          {hasBug
+                            ? "❌ BUG CONFIRMED: Search params were STRIPPED!"
+                            : "✅ Params received correctly"}
+                        </div>
+                      );
+                    })()}
 
                     <details>
                       <summary className="text-sm text-gray-400 cursor-pointer hover:text-gray-200">
