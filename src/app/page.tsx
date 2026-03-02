@@ -1,65 +1,175 @@
-import Image from "next/image";
+"use client";
+
+import { useState } from "react";
+
+type TestResult = {
+  label: string;
+  response: Record<string, unknown> | null;
+  error: string | null;
+  status: "idle" | "loading" | "done" | "error";
+};
 
 export default function Home() {
+  const [results, setResults] = useState<TestResult[]>([]);
+
+  const updateResult = (index: number, update: Partial<TestResult>) => {
+    setResults((prev) => {
+      const copy = [...prev];
+      copy[index] = { ...copy[index], ...update };
+      return copy;
+    });
+  };
+
+  const runTest = async (
+    label: string,
+    url: string,
+    index: number
+  ) => {
+    updateResult(index, { status: "loading", response: null, error: null });
+    try {
+      const res = await fetch(url);
+      const data = await res.json();
+      updateResult(index, { status: "done", response: data });
+    } catch (err) {
+      updateResult(index, {
+        status: "error",
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  };
+
+  const tests = [
+    {
+      label: "Test 1: Basic params",
+      url: "/api/test-params?foo=bar&baz=123",
+    },
+    {
+      label: "Test 2: Artworks (exact repro)",
+      url: "/api/image-ai/artworks?newestFirst=true&skip=20&limit=20",
+    },
+    {
+      label: "Test 3: Many params",
+      url: "/api/test-params?a=1&b=2&c=3&d=4&e=5",
+    },
+    {
+      label: "Test 4: Special characters",
+      url: "/api/test-params?query=hello%20world&filter=a%26b",
+    },
+    {
+      label: "Test 5: No params (baseline)",
+      url: "/api/test-params",
+    },
+  ];
+
+  const runAllTests = () => {
+    const initial = tests.map((t) => ({
+      label: t.label,
+      response: null,
+      error: null,
+      status: "idle" as const,
+    }));
+    setResults(initial);
+
+    tests.forEach((t, i) => {
+      runTest(t.label, t.url, i);
+    });
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <main className="min-h-screen bg-gray-950 text-gray-100 p-8">
+      <div className="max-w-4xl mx-auto">
+        <h1 className="text-3xl font-bold mb-2">
+          🔍 Appwrite Sites — Search Params Bug Repro
+        </h1>
+        <p className="text-gray-400 mb-6">
+          This app tests whether Next.js API route search/query parameters are
+          correctly received on Appwrite Sites. The reported issue: params like{" "}
+          <code className="bg-gray-800 px-1 rounded">
+            ?newestFirst=true&skip=20&limit=20
+          </code>{" "}
+          are stripped server-side.
+        </p>
+
+        <button
+          onClick={runAllTests}
+          className="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-6 py-3 rounded-lg mb-8 transition-colors cursor-pointer"
+        >
+          ▶ Run All Tests
+        </button>
+
+        <div className="space-y-6">
+          {tests.map((test, i) => {
+            const result = results[i];
+            return (
+              <div
+                key={i}
+                className="bg-gray-900 border border-gray-800 rounded-lg p-5"
+              >
+                <h2 className="text-lg font-semibold mb-1">{test.label}</h2>
+                <p className="text-sm text-gray-500 font-mono mb-3">
+                  GET {test.url}
+                </p>
+
+                {!result || result.status === "idle" ? (
+                  <p className="text-gray-600 text-sm">Not run yet</p>
+                ) : result.status === "loading" ? (
+                  <p className="text-yellow-400 text-sm">Loading...</p>
+                ) : result.status === "error" ? (
+                  <p className="text-red-400 text-sm">Error: {result.error}</p>
+                ) : (
+                  <div>
+                    {/* Highlight the key finding */}
+                    <div
+                      className={`mb-3 p-3 rounded text-sm font-semibold ${
+                        result.response &&
+                        (result.response as Record<string, unknown>)
+                          .paramCount === 0 &&
+                        test.url.includes("?")
+                          ? "bg-red-900/50 text-red-300 border border-red-700"
+                          : "bg-green-900/50 text-green-300 border border-green-700"
+                      }`}
+                    >
+                      {result.response &&
+                      (result.response as Record<string, unknown>)
+                        .paramCount === 0 &&
+                      test.url.includes("?")
+                        ? "❌ BUG CONFIRMED: Search params were STRIPPED!"
+                        : "✅ Params received correctly"}
+                    </div>
+
+                    <details>
+                      <summary className="text-sm text-gray-400 cursor-pointer hover:text-gray-200">
+                        Full response
+                      </summary>
+                      <pre className="mt-2 bg-gray-800 p-3 rounded text-xs overflow-auto max-h-64">
+                        {JSON.stringify(result.response, null, 2)}
+                      </pre>
+                    </details>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        <div className="mt-10 p-5 bg-gray-900 border border-gray-800 rounded-lg">
+          <h2 className="text-lg font-semibold mb-2">📋 How to reproduce</h2>
+          <ol className="list-decimal list-inside space-y-1 text-sm text-gray-400">
+            <li>Deploy this app to Appwrite Sites</li>
+            <li>Click &quot;Run All Tests&quot; on the deployed version</li>
+            <li>
+              If the bug exists, tests with query params will show{" "}
+              <span className="text-red-400">red ❌ BUG CONFIRMED</span> status
+            </li>
+            <li>
+              Compare with running locally (
+              <code className="bg-gray-800 px-1 rounded">npm run dev</code>)
+              where all tests should pass ✅
+            </li>
+            <li>Check Appwrite Sites logs for server-side console output</li>
+          </ol>
         </div>
-      </main>
-    </div>
+      </div>
+    </main>
   );
 }
